@@ -16,6 +16,7 @@ from datetime import datetime
 from types import SimpleNamespace
 import shutil
 from collections import defaultdict
+import ast
 
 
 def memory_alloc(logic="true"):
@@ -31,112 +32,211 @@ def memory_alloc(logic="true"):
         # Stop tracing memory allocations
         tracemalloc.stop()
 
-# Check the operating system
-if os.name == 'posix':  # 'posix' indicates Linux or macOS
-    sys.path.append('/home/pi/National_energy_modelling')  # Replace with your Linux path
-    os.system(clear)
-elif os.name == 'nt':  # 'nt' indicates Windows
-    sys.path.append(r'C:/Users/dc278/OneDrive - The University of Waikato/Documents/GitHub/National_energy_modelling_1')
-    os.system('cls')
+os.system("cls" if os.name == "nt" else "clear")
 
+# ============================================================
+# Project root
+# ============================================================
+# Assumes this script is in the repo root.
+# If this script is inside a subfolder, change to:
+# PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parent
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(PROJECT_ROOT))
+
+# Optional sibling repo
+NATIONAL_ENERGY_ROOT = PROJECT_ROOT.parent / "National_energy_modelling"
+if NATIONAL_ENERGY_ROOT.exists() and str(NATIONAL_ENERGY_ROOT) not in sys.path:
+    sys.path.append(str(NATIONAL_ENERGY_ROOT))
+
+# ============================================================
+# Imports from local project
+# ============================================================
+from test_folder.normal_dist_1000datas import sample_normal_from_df
+from test_folder.cf_8760_to_normal_dist import hourly_to_4hourly
 
 from national_energy_modelling_function_file import *
 from pgraph_output_class_value import *
 from pgraph_csv_organiser_rev import *
-import email_myself
 from pgraph_excel_organiser import *
 from pgraph_output_organiser import *
+import email_myself
 
+# ============================================================
+# Common folders
+# ============================================================
+TEST_FOLDER = PROJECT_ROOT / "test_folder"
+OUTPUT_FOLDER = PROJECT_ROOT / "folder_output_main"
+MONTE_CARLO_OUTPUT = PROJECT_ROOT / "MonteCarloOutput"
 
-#time starting up
-time_setup= 0
+# Optional external/local data folders
+DOWNLOADS_18SEPT = Path.home() / "Downloads" / "18sept"
+ROYAL_SOC_FOLDER = Path.home() / "Downloads" / "Royal_Soc" / "Grid stuff" / "RETA ERGO reports"
+HYDRO_FOLDER = Path.home() / "Downloads" / "20dec24 work" / "infrastructure"
+
+# ============================================================
+# Timing setup
+# ============================================================
+time_setup = 0
 time_step = time.time()
 time_csv = 0
 time_solving = 0
-
 
 current = datetime.now()
 start_time = time.time()
 solved_time = time.time()
 
-current_time = current.strftime('%H:%M:%S')
-print('Current Time is:', current_time)
+current_time = current.strftime("%H:%M:%S")
+print("Current Time is:", current_time)
 
-directory_path = "folder_output_main"
-##### Pathway setting
-# main_path = "C:\\Users\\dc278\\OneDrive - The University of Waikato\\Documents\\GitHub\\P-graph-monte-carlo\\test_folder/test5_26march_few_plants.xlsx"
-# main_path = "C:\\Users\\dc278\\OneDrive - The University of Waikato\\Documents\\GitHub\\P-graph-monte-carlo\\test_folder/test5_26march_one_plant.xlsx"
-# main_path = "C:\\Users\\dc278\\OneDrive - The University of Waikato\\Documents\\GitHub\\P-graph-monte-carlo\\test_folder/test5_26march.xlsx"
-main_path = r"C:\Users\dc278\Downloads\18sept\Compiled Process Heat Data.xlsx"
-# main_path = r"C:\Users\dc278\Downloads\18sept\Compiled Process Heat Data_one_plant.xlsx"
-# main_path = r"C:\Users\dc278\Downloads\18sept\Compiled Process Heat Data few plants.xlsx"
-# main_path = r"C:\Users\dc278\Downloads\18sept\Compiled Process Heat Data_Electrification.xlsx"
-# main_path = r"C:\Users\dc278\Downloads\18sept\Compiled Process Heat Data_Full_Electrification.xlsx"
-# main_path = r"C:\Users\dc278\Downloads\18sept\Compiled Process Heat Data_one_plant_example_5.xlsx"
+directory_path = OUTPUT_FOLDER
 
+# ============================================================
+# Main input workbook
+# ============================================================
+# Pick one of these as needed
+# main_path = TEST_FOLDER / "test5_26march_few_plants.xlsx"
+# main_path = TEST_FOLDER / "test5_26march_one_plant.xlsx"
+# main_path = TEST_FOLDER / "test5_26march.xlsx"
+main_path = DOWNLOADS_18SEPT / "Compiled Process Heat Data.xlsx"
+# main_path = DOWNLOADS_18SEPT / "Compiled Process Heat Data_one_plant.xlsx"
+# main_path = DOWNLOADS_18SEPT / "Compiled Process Heat Data few plants.xlsx"
+# main_path = DOWNLOADS_18SEPT / "Compiled Process Heat Data_one_plant_example_5.xlsx"
 
+# ============================================================
+# Other input paths
+# ============================================================
+electricity_price_monthly_path = TEST_FOLDER / "combined_monthly_hours.csv"
+electricity_price_hourly_path = TEST_FOLDER / "ExcelDF3.pkl"
 
-electricity_price_monthly_path = r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\test_folder/combined_monthly_hours.csv'
-electricity_price_hourly_path = r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\test_folder/ExcelDF3.pkl'
+industry_curve_path = TEST_FOLDER / "Industries_curve.xlsx"
+capacity_factor_monthly_gen_dict_path = TEST_FOLDER / "capacity_factor.pkl"
+capacity_factor_hourly_gen_dict_path = TEST_FOLDER / "capacity_factor_hourly.pkl"
+capacity_factor_hourly_gen_csv_path = TEST_FOLDER / "capacity_factor_hourly_len_24.pkl"
+capacity_factor_monthly_gen_csv_path = TEST_FOLDER / "capacity_factor_hourly_monthly.pkl"
 
-industry_curve_path = r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\test_folder/Industries_curve.xlsx'
-capacity_factor_monthly_gen_dict_path = r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\test_folder/capacity_factor.pkl'
-capacity_factor_hourly_gen_dict_path = r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\test_folder/capacity_factor_hourly.pkl'
-capacity_factor_hourly_gen_csv_path = r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\test_folder/capacity_factor_hourly_len_24.pkl'
-capacity_factor_monthly_gen_csv_path = r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\test_folder/capacity_factor_hourly_monthly.pkl'
-wholesale_electricity_ABY_price_path = r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\test_folder/Relative_Price_Stats.csv' #test3
-wholesale_electricity_relative_price_path = r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\test_folder/Simulated_Prices_Q1.csv'#test4
-wholesale_electricity_ABY_dem_path = r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\test_folder/Relative_Demand_Stats.csv' #
-wholesale_electricity_relative_dem_path = r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\test_folder/Simulated_Demand_Q1.csv'
+wholesale_electricity_ABY_price_path = TEST_FOLDER / "Relative_Price_Stats_4h.csv"
+wholesale_electricity_relative_price_path = TEST_FOLDER / "Simulated_Prices_Q1.csv"
+wholesale_electricity_ABY_dem_path = TEST_FOLDER / "Relative_Demand_Stats.csv"
+wholesale_electricity_relative_dem_path = TEST_FOLDER / "Simulated_Demand_Q1.csv"
 
-compiled_data_path = "C:\\Users\\dc278\\Downloads\\Royal_Soc\\Grid stuff\\RETA ERGO reports\\compiled.xlsx"
-Pd_transmission = pd.read_excel(compiled_data_path, sheet_name="ERGO transmission cost", header=0, index_col=None, usecols="A:G", nrows=15)
-Pd_transmission.columns = Pd_transmission.columns.str.strip() #strip to remove spaces
+industry_curve_path_4hourly = TEST_FOLDER / "Industrial_curve_4hourly.xlsx"
 
-hydrostorage_path = r"C:\Users\dc278\Downloads\20dec24 work\infrastructure\20231231_EnergyStorageCapacity(DerivedForScheme) 1980 onwards.xlsx"
-Pd_hydro = pd.read_excel(hydrostorage_path, sheet_name="Exported", header=0, index_col=None, usecols="A:O", nrows=25)
+compiled_data_path = ROYAL_SOC_FOLDER / "compiled.xlsx"
+hydrostorage_path = HYDRO_FOLDER / "20231231_EnergyStorageCapacity(DerivedForScheme) 1980 onwards.xlsx"
 
+# ============================================================
+# Read transmission and hydro data
+# ============================================================
+Pd_transmission = pd.read_excel(
+    compiled_data_path,
+    sheet_name="ERGO transmission cost",
+    header=0,
+    index_col=None,
+    usecols="A:G",
+    nrows=15,
+)
+Pd_transmission.columns = Pd_transmission.columns.str.strip()
+
+Pd_hydro = pd.read_excel(
+    hydrostorage_path,
+    sheet_name="Exported",
+    header=0,
+    index_col=None,
+    usecols="A:O",
+    nrows=25,
+)
 
 transmission_cost_lookup = {
-    (int(row['Transmission Cost']), row['Single/Double'].strip()): row['TAC']
-    for _, row in Pd_transmission.iterrows()}
+    (int(row["Transmission Cost"]), row["Single/Double"].strip()): row["TAC"]
+    for _, row in Pd_transmission.iterrows()
+}
 
+# ============================================================
+# Read main workbook sheets
+# ============================================================
+Pd_Generation = pd.read_excel(
+    main_path,
+    sheet_name="Generation_updated_v1",
+    header=0,
+    index_col=None,
+    usecols="A:AD",
+    nrows=422,
+)
 
-##### Read data from Excel file
-Pd_Generation = pd.read_excel(main_path, sheet_name="Generation_updated_v1", header=0, index_col=None, usecols="A:AD", nrows=422)
-Pd_Factory = pd.read_excel(main_path, sheet_name="Factory_updated (5)", header=0, index_col=None, usecols="A:BD", nrows=429)
-Pd_GXP_edited = pd.read_excel(main_path, sheet_name="GXP_edited_v4", header=0, index_col=None, usecols="A:BA", nrows=217)
-Pd_Technologies = pd.read_excel(main_path, sheet_name="Technologies", header=0, index_col=None, usecols="A:I", nrows=12)
-Pd_GxpGxp_Connections = pd.read_excel(main_path, sheet_name="gxp_gxp_connection_v1", header=0, index_col=None, usecols="A:H",
-                                      nrows=653)
-Pd_biomass_resource = pd.read_excel(main_path, sheet_name="biomass_resource", header=0, index_col=None, usecols="A:O",
-                                    nrows=214)
-Pd_biomass_factory_connections = pd.read_excel(main_path, sheet_name="biomass_factory_distance", header=0, index_col=None,
-                                               usecols="A:I", nrows=27564)
-Pd_biomass_generation_connections = pd.read_excel(main_path, sheet_name="biomass_to_generation_sites", header=0, index_col=None,
-                                                  usecols="A:I", nrows=26197)
+Pd_Factory = pd.read_excel(
+    main_path,
+    sheet_name="Factory_updated (5)",
+    header=0,
+    index_col=None,
+    usecols="A:BD",
+    nrows=429,
+)
 
+Pd_GXP_edited = pd.read_excel(
+    main_path,
+    sheet_name="GXP_edited_v4",
+    header=0,
+    index_col=None,
+    usecols="A:BA",
+    nrows=217,
+)
+
+Pd_Technologies = pd.read_excel(
+    main_path,
+    sheet_name="Technologies",
+    header=0,
+    index_col=None,
+    usecols="A:I",
+    nrows=12,
+)
+
+Pd_GxpGxp_Connections = pd.read_excel(
+    main_path,
+    sheet_name="gxp_gxp_connection_v1",
+    header=0,
+    index_col=None,
+    usecols="A:H",
+    nrows=653,
+)
+
+Pd_biomass_resource = pd.read_excel(
+    main_path,
+    sheet_name="biomass_resource",
+    header=0,
+    index_col=None,
+    usecols="A:O",
+    nrows=214,
+)
+
+Pd_biomass_factory_connections = pd.read_excel(
+    main_path,
+    sheet_name="biomass_factory_distance",
+    header=0,
+    index_col=None,
+    usecols="A:I",
+    nrows=27564,
+)
+
+Pd_biomass_generation_connections = pd.read_excel(
+    main_path,
+    sheet_name="biomass_to_generation_sites",
+    header=0,
+    index_col=None,
+    usecols="A:I",
+    nrows=26197,
+)
+
+# ============================================================
+# Read Monte Carlo CSV inputs
+# ============================================================
 Pd_simulated_ABY = pd.read_csv(wholesale_electricity_relative_price_path)
 Pd_relative_price = pd.read_csv(wholesale_electricity_ABY_price_path)
 
 Pd_simulated_ABY_dem = pd.read_csv(wholesale_electricity_relative_dem_path)
 Pd_relative_dem = pd.read_csv(wholesale_electricity_ABY_dem_path)
 
-# print("---- d_simulated_ABY ----")
-# print(Pd_simulated_ABY.head())
-
-# print("\n---- Pd_relative_price ----")
-# print(Pd_relative_price.head())
-
-# print("\n---- Pd_simulated_ABY_dem ----")
-# print(Pd_simulated_ABY_dem.head())
-
-# print("\n---- Pd_relative_dem ----")
-# print(Pd_relative_dem.head())
-
-# with open(r'C:\Users\dc278\PycharmProjects\Renewables_Ninja\capacity_factor.pkl', 'rb') as f:
-#     capacity_factor_gen = pickle.load(f)
-# print(capacity_factor_gen)
 
 
 # Solver selection: "INSIDEOUT" "SSGLP" "SSG" "MSG"
@@ -145,49 +245,43 @@ num_sol = 1
 tracemalloc.start()
 num_simulations = 1
 
+rng = np.random.default_rng(num_sol)
 
-island = "Ntorth"
+island = "Northr"
 distance_constraint = 200000
 lines_charges = 36.9641344  # NZD/kVA
 proportional_cost_op = {'fix_cost':0.00000 ,'proportional_cost':0.00000}
 fpvv_factor = [0.67, 0.74, 0.77, 0.8, 0.8, 0.85, 0.92, 0.91, 0.84, 0.75, 0.75, 0.68]
 assumed_cost_coefficient = 2
 
-time_period = 12
+time_period = 6
 time_multiplier = []
 for l in range(1, time_period+1):
     time_multiplier.append((f"{l:02}"))
-time_resolution = "monthly" #hourly, monthly
-
-
+time_resolution = "hourly" #hourly, monthly
 
 
 #import cf datasets
 if time_resolution == 'hourly':
-    with open(capacity_factor_hourly_gen_csv_path, 'rb') as f:
-        capacity_factor_gen = pickle.load(f)
+    capacity_factor_gen= hourly_to_4hourly(capacity_factor_hourly_gen_dict_path)
+    # print(capacity_factor_gen)
+#     with open(capacity_factor_hourly_gen_dict_path, 'rb') as f:
+#         capacity_factor_gen = pickle.load(f)
     # print(capacity_factor_gen)
 elif time_resolution == 'monthly':
     with open(capacity_factor_monthly_gen_csv_path, 'rb') as f:
         capacity_factor_gen = pickle.load(f)
 CF_coordinates = {capacity_factor_gen['index'][i]: capacity_factor_gen['coordinates'][i] for i in range(len(capacity_factor_gen['index']))}
-# CF_value = {capacity_factor_gen['index'][i]: capacity_factor_gen['cf'][i][:24] for i in range(len(capacity_factor_gen['index']))}
-# print(CF_value)
-# CF_value = {capacity_factor_gen['index'][i]: capacity_factor_gen['cf'][i][:24] for i in range(len(capacity_factor_gen['index']))}
-# print(CF_value)
+# print(CF_coordinates)
+
 
 if time_resolution == 'hourly':
-    selected_hours = [0, 4, 8, 12, 16, 20]
-    CF_value = {capacity_factor_gen['index'][i]: ( [capacity_factor_gen['cf'][i][h] for h in selected_hours]
-            if len(capacity_factor_gen['cf'][i]) > max(selected_hours) else []  # keep empty list if cf is empty or too short
-        )  for i in range(len(capacity_factor_gen))}
-    for key in CF_value:
-        if CF_value[key]:  # only modify non-empty lists
-            CF_value[key] = [0.002 if v == 0 else v for v in CF_value[key]]
+    CF_value = sample_normal_from_df(capacity_factor_gen,rng)
+
 elif time_resolution == 'monthly':
     CF_value = {capacity_factor_gen['index'][i]: capacity_factor_gen['cf'][i][:24] for i in range(len(capacity_factor_gen['index']))}
-
 # print(CF_value)
+
 # print(capacity_factor_gen)
 # Extract important columns
 Pd_keys = ['ObjectID', 'Types of power station', 'Type', 'Capacity (MW)','Generation (GWh/yr)', 'North_South', 'NEAR_DIST', 'POC code',
@@ -210,14 +304,15 @@ Pd_GXP = python_dict_dot_notation(Pd_keys, Pd_GXP_edited)
 Pd_keys = ['Point 1', 'Point 2', 'Distance', 'North_South', 'Value (MVA)',	'kV',	'line type 2']
 Pd_GXP_GXP = python_dict_dot_notation(Pd_keys, Pd_GxpGxp_Connections)
 
-Pd_keys = ['ORIG ID', 'Inforest harvest',	'K logs',	'Sawmill chip',	'Straw and Stover',	'Pellets', 'Row Labels', 'NZTM_x',	'NZTM_y',	'Longitude',	'Latitude', 'North_South']
-Pd_bio_on = python_dict_dot_notation(Pd_keys, Pd_biomass_resource)
+Pd_keys = ['ORIG ID', 'Inforest harvest',	'K logs',	'Sawmill chip',	'Straw and Stover',	'Pellets', 'Row Labels', 'North_South']
+Pd_bio = python_dict_dot_notation(Pd_keys, Pd_biomass_resource)
 
 Pd_keys = ['Source ID', 'Biomass ID', 'Distance', 'North_South']
 Pd_bio_fac = python_dict_dot_notation(Pd_keys, Pd_biomass_factory_connections)
 
 Pd_keys = ['Source ID', 'Biomass ID', 'Distance', 'North_South']
 Pd_bio_gen = python_dict_dot_notation(Pd_keys, Pd_biomass_generation_connections)
+
 
 
 # add hydrogen into the model and potential electricity generation
@@ -244,13 +339,15 @@ mat_units_ton = {'time_unit': 'month', 'money_unit': 'NZD', 'mass_unit': 'tons'}
 
 
 
-df = pd.read_excel(industry_curve_path,sheet_name="Sheet1")
 df2 = pd.read_excel(main_path)
 # print(df)
 if time_resolution == 'hourly':
     df3 = pd.read_pickle(electricity_price_hourly_path)
+    df_industrial_curve = pd.read_excel(industry_curve_path_4hourly,sheet_name="Sheet1", header=0, index_col=None, usecols="A:G", nrows=9)
 elif time_resolution == 'monthly':
     df3 = pd.read_csv(electricity_price_monthly_path)
+    df_industrial_curve = pd.read_excel(industry_curve_path,sheet_name="Sheet1", header=0, index_col=None, usecols="A:M", nrows=9)
+
 
 # print(df3)
 #relative price file
@@ -295,11 +392,11 @@ for num in range(0,num_simulations):
     for i in range(len(gxp['poc'])):
         if time_resolution == 'hourly':
             match_found = False  # Track if we found a match
-
+            dem_4_hourly = 4
             for j in range(len(relative_dem_headers)):
                 if f"R_{gxp['poc'][i]}" == relative_dem_headers[j]:
                     #print(f"R_{gxp['poc'][i]} == {relative_dem_headers[j]}")
-                    multiplied_result = [a * b for a, b in zip(relative_dem[relative_dem_headers[j]], row_dict_demand[num])]
+                    multiplied_result = [a * b * dem_4_hourly for a, b in zip(relative_dem[relative_dem_headers[j]], row_dict_demand[num])]
                     gxp['dem'].append(multiplied_result[:time_period])
                     # print(multiplied_result[:time_period])
                     match_found = True
@@ -310,15 +407,18 @@ for num in range(0,num_simulations):
     for i in range(len(gxp['poc'])):
         if time_resolution == 'hourly':
             match_found = False  # Track if we found a match
+            adjustment_other_charges = 2
             for j in range(len(relative_price_headers)):
                 if f"R_{gxp['poc'][i]}" == relative_price_headers[j]:
-                    multiplied_result = [a * b for a, b in zip(relative_price[relative_price_headers[j]], rows_dict_price[num])]
+                    multiplied_result = [a * b * adjustment_other_charges for a, b in zip(relative_price[relative_price_headers[j]], rows_dict_price[num])]
                     gxp['price'].append(multiplied_result[:time_period]) 
                     match_found = True
                     break
             if not match_found:
-                multiplied_result = [a * b for a, b in zip(relative_price[relative_price_headers[1]], rows_dict_price[num])]
+                multiplied_result = [a * b * adjustment_other_charges for a, b in zip(relative_price[relative_price_headers[1]], rows_dict_price[num])]
+                # print(multiplied_result)
                 gxp['price'].append(multiplied_result[:time_period])
+            
         elif time_resolution == 'monthly':
             for k in range(len(df3)):
                 if gxp['poc'][i] == str(df3['POC'][k]):
@@ -331,7 +431,7 @@ for num in range(0,num_simulations):
                 base_prices = (df3.iloc[0].tolist()[1:])
                 multiplied_result = [round(a * b, 3)for a, b in zip(fpvv_factor, base_prices)] #wip
                 gxp['price'].append(multiplied_result)
-
+    # print("gdd",gxp['price'])
     for i in range(len(gxp['poc'])):
         for l in range(len(time_multiplier)):
             G.add_node("M" + str(gxp['index'][i]) +str(101)+ str(time_multiplier[l]), names="M" + str(gxp['index'][i]) +str(101)+ str(time_multiplier[l]),type='intermediate',
@@ -362,23 +462,17 @@ for num in range(0,num_simulations):
             if gxp['dem'][i][l]!=0:
                 if time_resolution == "monthly":
                     G.add_node("O" + str(gxp['index'][i] + 2000) + str(time_multiplier[l]), names="O" + str(gxp['index'][i] + 2000)+ str(time_multiplier[l]), capacity_lower_bound=0,
-                            capacity_upper_bound=1e8, fix_cost=0, proportional_cost=(gxp['price'][i][l])*1e3/fpvv_factor[l]*3) #warning (gxp['price'][i][l])*1e3/fpvv_factor[l]*3
+                            capacity_upper_bound=1e8, fix_cost=0, proportional_cost=0) #warning (gxp['price'][i][l])*1e3/fpvv_factor[l]*3
                     
                 elif time_resolution == "hourly":
                     G.add_node("O" + str(gxp['index'][i] + 2000) + str(time_multiplier[l]), names="O" + str(gxp['index'][i] + 2000)+ str(time_multiplier[l]), capacity_lower_bound=0,
-                            capacity_upper_bound=1e8, fix_cost=0, proportional_cost=(gxp['price'][i][l])*1e3/fpvv_factor[l]*3    ) #warning (gxp['price'][i][l])*1e3/fpvv_factor[l]*3                   
+                            capacity_upper_bound=1e8, fix_cost=0, proportional_cost=0 ) #warning (gxp['price'][i][l])*1e3/fpvv_factor[l]*3                   
                 G.add_node("M" + str(gxp['index'][i] + 2300) + str(time_multiplier[l]), names="M" + str(gxp['index'][i] + 2300) + str(time_multiplier[l]), type='product',
-                            flow_rate_lower_bound=gxp['dem'][i][l], flow_rate_upper_bound=1.01*gxp['dem'][i][l], price=100, units=mat_units_GWh)
+                            flow_rate_lower_bound=gxp['dem'][i][l], flow_rate_upper_bound=1.01*gxp['dem'][i][l], price=0, units=mat_units_GWh)
                         
                 G.add_edge("M" + str(gxp['index'][i] + 600) + str(time_multiplier[l]),"O" + str(gxp['index'][i] + 2000) + str(time_multiplier[l]),weight=1)
                 G.add_edge("O" + str(gxp['index'][i] + 2000) + str(time_multiplier[l]),"M" + str(gxp['index'][i] + 2300) + str(time_multiplier[l]),weight=0.99)
                 
-                #In case more electricity infrastructure has to be built
-                # G.add_node("M" + str(gxp['index'][i] + 14500) + str(time_multiplier[l]), names="M" + str(gxp['index'][i] + 14500) + str(time_multiplier[l]), type="raw_material", flow_rate_lower_bound=0, flow_rate_upper_bound=1e6, price=10000000, units=mat_units_GWh)
-                # G.add_node("O" + str(gxp['index'][i] + 8500) + str(time_multiplier[l]), names="O" + str(gxp['index'][i] + 8500) + str(time_multiplier[l]), capacity_lower_bound=0,
-                #         capacity_upper_bound=1e8, fix_cost=0, proportional_cost=0)
-                # G.add_edge("M" + str(gxp['index'][i] + 14500) + str(time_multiplier[l]),"O" + str(gxp['index'][i] + 8500) + str(time_multiplier[l]),weight=1)
-                # G.add_edge("O" + str(gxp['index'][i] + 8500) + str(time_multiplier[l]),"M" + str(gxp['index'][i]) + str(time_multiplier[l]),weight=1)
             else:
                 pass
         
@@ -416,7 +510,7 @@ for num in range(0,num_simulations):
         else:
             pass
         gen['cf'].append(temp_cf)
-
+        # print(gen['cf'])
         if sum(gen['cf'][-1][0:time_period])>=0.001:
             
 #this is for the commissioning generation without any fuel usage. Removes the 14000 level nodes as capacity is unncessary since it has already been built.
@@ -430,14 +524,14 @@ for num in range(0,num_simulations):
                         flow_rate_lower_bound=0, flow_rate_upper_bound=1e6, price=0, units=mat_units_MWh)
                 
                 if time_resolution == 'hourly': 
-                    G.add_node("M" + str(9000 + gen['index'][-1]), names="M" + str(9000 + gen['index'][-1]),type='product',
-                        flow_rate_lower_bound=0, flow_rate_upper_bound=100*gen['capacity'][-1], price=gen['price'][-1]/365/24,units=mat_units_MWh)
-                    
                     # newly updated nov 11 2025
                     G.add_node("O" + str(4000 + gen['index'][-1]), names="O" + str(4000 + gen['index'][-1]), capacity_lower_bound=0,
                             capacity_upper_bound=gen['capacity'][-1], fix_cost=0, proportional_cost=gen['price'][-1]/365/24*time_period)  # gen capacity
-                    #prevent double counting of electricitry price
-
+                    #prevent double counting of electricitry price                    
+                    
+                    G.add_node("M" + str(9000 + gen['index'][-1]), names="M" + str(9000 + gen['index'][-1]),type='product',
+                        flow_rate_lower_bound=0, flow_rate_upper_bound=100*gen['capacity'][-1], price=gen['price'][-1]/365/24,units=mat_units_MWh)
+                    
                 elif time_resolution == 'monthly':
                     # newly updated nov 11 2025
                     G.add_node("O" + str(4000 + gen['index'][-1]), names="O" + str(4000 + gen['index'][-1]), capacity_lower_bound=0,
@@ -461,13 +555,7 @@ for num in range(0,num_simulations):
                 G.add_edge("M" + str(3500 + gen['index'][-1]),"O" + str(4500 + gen['index'][-1]),weight=1)
                 G.add_edge("O" + str(4500 + gen['index'][-1]),"M" + str(15500),weight=1)
 
-                op_node_as_capacity = "O" + str(4000 + gen['index'][-1])
-                op_node_as_out_flow = "O" + str(2000 + gen['index'][-1])
-                mat_in_node = "M" + str(3000 + gen['index'][-1])
-                mat_out_node = "M" + str(5000 + gen['index'][-1])
 
-
-                                        
 
                 for l in range(len(time_multiplier)):
 
@@ -477,7 +565,8 @@ for num in range(0,num_simulations):
                                 names="M" + str(7000 + gen['index'][-1]) + str(time_multiplier[l]), type='intermediate',
                                 flow_rate_lower_bound=0, flow_rate_upper_bound=0, price=0, units=mat_units_MWh)
 
-                        G.add_node("O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]),names="O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]), **proportional_cost_op)
+                        G.add_node("O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]),names="O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]),capacity_lower_bound=0,
+                            capacity_upper_bound=1e8, **proportional_cost_op)
                         G.add_node("M" + str(6500 + gen['index'][-1])+str(time_multiplier[l]), names="M" + str(6500 + gen['index'][-1])+str(time_multiplier[l]),type='intermediate',
                             flow_rate_lower_bound=0, flow_rate_upper_bound=1e6, price=0,units=mat_units_MWh) 
                         G.add_edge("M" + str(6500 + gen['index'][-1])+str(time_multiplier[l]),"O" + str(4500 + gen['index'][-1]),weight=1)
@@ -486,7 +575,7 @@ for num in range(0,num_simulations):
                             G.add_node("O" + str(2000 + gen['index'][-1]) + str(time_multiplier[l]), names="O" + str(2000 + gen['index'][-1]) + str(time_multiplier[l]), capacity_lower_bound=0,
                             capacity_upper_bound=gen['capacity'][-1], fix_cost=0, proportional_cost=0)
                             G.add_edge("O" + str(2000 + gen['index'][-1])+ str(time_multiplier[l]),
-                                    "M" + str(7000 + gen['index'][-1]) + str(time_multiplier[l]), weight=gen['cf'][-1][l])
+                                    "M" + str(7000 + gen['index'][-1]) + str(time_multiplier[l]), weight=gen['cf'][-1][l] * 1)
                             G.add_edge("M" + str(6000 + gen['index'][-1]), "O" + str(2000 + gen['index'][-1]) + str(time_multiplier[l]), weight=1)
                             G.add_edge("O" + str(2000 + gen['index'][-1]) + str(time_multiplier[l]), "M" + str(2500 + gen['index'][-1]), weight=1)
                                                         
@@ -503,19 +592,17 @@ for num in range(0,num_simulations):
             
                             G.add_edge("O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]),"M" + str(6500 + gen['index'][-1])+str(time_multiplier[l]),weight=1/(gen['cf'][-1][l]*730)) #cf wip6/11/2025
           
-                        G.add_edge("M" + str(7000 + gen['index'][-1]) + str(time_multiplier[l]),
-                                    "O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]), weight=1)
+                        G.add_edge("M" + str(7000 + gen['index'][-1]) + str(time_multiplier[l]), "O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]), weight=1)
                         
                         #prevent double counting edge
                         if time_resolution == 'hourly':
-                            G.add_edge("O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]), "M" + str(9000 + gen['index'][-1]) ,weight=1/(gen['cf'][-1][l]))
+                            G.add_edge("O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]), "M" + str(9000 + gen['index'][-1]) ,weight=1/(gen['cf'][-1][l])/4)
                         elif time_resolution == 'monthly':
                             G.add_edge("O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]), "M" + str(9000 + gen['index'][-1]) ,weight=1/gen['cf'][-1][l]/730)
                     
                     #curtail
                         G.add_node("O" + str(10000 + gen['index'][-1]) + str(time_multiplier[l]),
-                                    names="O" + str(10000 + gen['index'][-1]) + str(time_multiplier[l]), **proportional_cost_op) 
-                        
+                                    names="O" + str(10000 + gen['index'][-1]) + str(time_multiplier[l]),capacity_lower_bound=0, capacity_upper_bound=1e7, **proportional_cost_op) 
                         G.add_node("M" + str(11000 + gen['index'][-1]) + str(time_multiplier[l]),
                                     names="M" + str(11000 + gen['index'][-1]) + str(time_multiplier[l]), type='product',
                                     flow_rate_lower_bound=0, flow_rate_upper_bound=1e6, price=0, units=mat_units_GWh)        
@@ -523,7 +610,17 @@ for num in range(0,num_simulations):
                         G.add_edge("O" + str(10000 + gen['index'][-1]) + str(time_multiplier[l]),"M" + str(11000 + gen['index'][-1]) + str(time_multiplier[l]),weight=1)
                 
                 if sum(gen['cf'][-1][0:time_period])>=0.001:
-                    text_file_bug_error_2(op_node_as_out_flow,op_node_as_capacity,mat_in_node,mat_out_node,time_period,time_multiplier,G,mat_units_GWh)
+                    G.add_edge("M" + str(3000 + gen['index'][-1]),  "O" + str(4000 + gen['index'][-1]), weight=1e-7)    
+                    for l in range(len(time_multiplier)):
+                        G.add_node("O" + str(2000 + gen['index'][-1])+str(time_multiplier[l]),names="O" + str(2000 + gen['index'][-1])+str(time_multiplier[l]),capacity_lower_bound=0, capacity_upper_bound=1e8, fix_cost=0, proportional_cost=0)
+                        G.add_node("M" + str(5000 + gen['index'][-1])+str(time_multiplier[l]),names="M" + str(5000 + gen['index'][-1])+str(time_multiplier[l]),type='intermediate', flow_rate_lower_bound=0, flow_rate_upper_bound=0, price=0,units=mat_units_GWh)
+                        G.add_edge("O" + str(2000 + gen['index'][-1])+str(time_multiplier[l]),"M" + str(3000 + gen['index'][-1]),weight=1)
+                        if time_resolution == 'hourly':
+                            G.add_edge( "O" + str(4000 + gen['index'][-1]),"M" + str(5000 + gen['index'][-1])+str(time_multiplier[l]),weight=4)
+                        elif time_resolution == 'monthly':
+                            G.add_edge( "O" + str(4000 + gen['index'][-1]),"M" + str(5000 + gen['index'][-1])+str(time_multiplier[l]),weight=1)
+                        G.add_edge("M" + str(5000 + gen['index'][-1])+str(time_multiplier[l]),"O" + str(2000 + gen['index'][-1])+str(time_multiplier[l]),weight=1)
+
 
                 
 
@@ -587,10 +684,6 @@ for num in range(0,num_simulations):
                 G.add_edge("M" + str(3500 + gen['index'][-1]),"O" + str(4500 + gen['index'][-1]),weight=1)
                 G.add_edge("O" + str(4500 + gen['index'][-1]),"M" + str(15500),weight=1)
                 
-                op_node_as_capacity = "O" + str(4000 + gen['index'][-1])
-                op_node_as_out_flow = "O" + str(2000 + gen['index'][-1])
-                mat_in_node = "M" + str(3000 + gen['index'][-1])
-                mat_out_node = "M" + str(5000 + gen['index'][-1])
                 
             
                 for l in range(len(time_multiplier)):
@@ -623,7 +716,7 @@ for num in range(0,num_simulations):
                                 G.add_edge("M" + str(1000 + gen['index'][-1]),"O" + str(2000 + gen['index'][-1]) + str(time_multiplier[l]), weight=1) #fix the time 4h
 
                                 G.add_edge("O" + str(2000 + gen['index'][-1]) + str(time_multiplier[l]),
-                                        "M" + str(7000 + gen['index'][-1]) + str(time_multiplier[l]), weight=gen['cf'][-1][l])
+                                        "M" + str(7000 + gen['index'][-1]) + str(time_multiplier[l]), weight=gen['cf'][-1][l] * 1)
                                 G.add_edge("O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]),"M" + str(6500 + gen['index'][-1])+str(time_multiplier[l]),weight=1/(gen['cf'][-1][l])) #cf wip6/11/2025
                                 
                             elif time_resolution == 'monthly':
@@ -637,10 +730,10 @@ for num in range(0,num_simulations):
                             
                             
                             if time_resolution == 'hourly':
-                                G.add_edge("M" + str(1000 + gen['index'][-1]),"O" + str(2000 + gen['index'][-1]) + str(time_multiplier[l]), weight=1/gen['cf'][-1][l]) #time fix 4h
+                                G.add_edge("M" + str(1000 + gen['index'][-1]),"O" + str(2000 + gen['index'][-1]) + str(time_multiplier[l]), weight=4/gen['cf'][-1][l]) #time fix 4h
                                 G.add_edge("O" + str(2000 + gen['index'][-1]) + str(time_multiplier[l]),
                                         "M" + str(7000 + gen['index'][-1]) + str(time_multiplier[l]), weight=1)#error need x4
-                                G.add_edge("O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]),"M" + str(6500 + gen['index'][-1])+str(time_multiplier[l]),weight=1/(gen['cf'][-1][l])) #cf wip6/11/2025
+                                G.add_edge("O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]),"M" + str(6500 + gen['index'][-1])+str(time_multiplier[l]),weight=1/(gen['cf'][-1][l]*4)) #cf wip6/11/2025
 
                             elif time_resolution == 'monthly':
                                 G.add_edge("M" + str(1000 + gen['index'][-1]),"O" + str(2000 + gen['index'][-1]) + str(time_multiplier[l]), weight=730/gen['cf'][-1][l]) #monthly fix
@@ -651,13 +744,12 @@ for num in range(0,num_simulations):
                         else:
                             print("error")
                         
-                        G.add_edge("M" + str(7000 + gen['index'][-1]) + str(time_multiplier[l]),
-                                    "O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]), weight=1)
+                        G.add_edge("M" + str(7000 + gen['index'][-1]) + str(time_multiplier[l]), "O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]), weight=1)
                         
                         #prevent double counting edge
                         if str(gen['type'][-1]) not in {"Bioenergy","Thermal","Cogeneration" }:
                             if time_resolution == 'hourly':
-                                G.add_edge("O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]), "M" + str(9000 + gen['index'][-1]) ,weight=1/gen['cf'][-1][l])
+                                G.add_edge("O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]), "M" + str(9000 + gen['index'][-1]) ,weight=1/gen['cf'][-1][l]/4)
                             elif time_resolution == 'monthly':
                                 G.add_edge("O" + str(8000 + gen['index'][-1]) + str(time_multiplier[l]), "M" + str(9000 + gen['index'][-1]) ,weight=1/gen['cf'][-1][l]/730)
                         elif str(gen['type'][-1]) in {"Bioenergy","Thermal","Cogeneration" }:
@@ -677,7 +769,17 @@ for num in range(0,num_simulations):
                         G.add_edge("O" + str(10000 + gen['index'][-1]) + str(time_multiplier[l]),"M" + str(11000 + gen['index'][-1]) + str(time_multiplier[l]),weight=1)
                                             
                 if sum(gen['cf'][-1][0:time_period])>=0.001:
-                    text_file_bug_error_2(op_node_as_out_flow,op_node_as_capacity,mat_in_node,mat_out_node,time_period,time_multiplier,G,mat_units_GWh)
+                    G.add_edge("M" + str(3000 + gen['index'][-1]),  "O" + str(4000 + gen['index'][-1]), weight=1e-7)    
+                    for l in range(len(time_multiplier)):
+                        G.add_node("O" + str(2000 + gen['index'][-1])+str(time_multiplier[l]),names="O" + str(2000 + gen['index'][-1])+str(time_multiplier[l]),capacity_lower_bound=0, capacity_upper_bound=1e8, fix_cost=0, proportional_cost=0)
+                        G.add_node("M" + str(5000 + gen['index'][-1])+str(time_multiplier[l]),names="M" + str(5000 + gen['index'][-1])+str(time_multiplier[l]),type='intermediate', flow_rate_lower_bound=0, flow_rate_upper_bound=0, price=0,units=mat_units_GWh)
+                        G.add_edge("O" + str(2000 + gen['index'][-1])+str(time_multiplier[l]),"M" + str(3000 + gen['index'][-1]),weight=1)
+                        if time_resolution == 'hourly':
+                            G.add_edge( "O" + str(4000 + gen['index'][-1]),"M" + str(5000 + gen['index'][-1])+str(time_multiplier[l]),weight=4)
+                        elif time_resolution == 'monthly':
+                            G.add_edge( "O" + str(4000 + gen['index'][-1]),"M" + str(5000 + gen['index'][-1])+str(time_multiplier[l]),weight=1)
+                            
+                        G.add_edge("M" + str(5000 + gen['index'][-1])+str(time_multiplier[l]),"O" + str(2000 + gen['index'][-1])+str(time_multiplier[l]),weight=1)
 
             # adding hydrogen connections
             #print(gen['cf'][-1][l]
@@ -742,7 +844,7 @@ for num in range(0,num_simulations):
                         gxp_connections_dict['Distance'].append(Pd_GXP_GXP.Distance[kk])
                         
                         if time_resolution == 'hourly':
-                            gxp_connections_dict['Capacity'].append(Pd_GXP_GXP.Value_MVA[kk]/1000)
+                            gxp_connections_dict['Capacity'].append(Pd_GXP_GXP.Value_MVA[kk]/1000*4)
 
                         elif time_resolution == 'monthly':
                             gxp_connections_dict['Capacity'].append(Pd_GXP_GXP.Value_MVA[kk]/1000*730)
@@ -797,14 +899,7 @@ for num in range(0,num_simulations):
                     dem_coal_boilers["dem_ID"].append(int((Pd_Fac.ObjectID[i])))
                     dem_coal_boilers["dem_hours"].append(int((Pd_Fac.Operating_Hours[i])))
                     dem_coal_boilers["coal_capacity"].append(int((Pd_Fac.Capacity[i])))                
-    # print((dem_coal_boilers))
-    # print(len(dem_coal_boilers["index"]))
-
-
-            
-    # print(dem_biomass_accessible_index)        
-            
-            # print(dem_coal_boilers)       
+  
 
     # print(gxp_codes)
     # demand sites
@@ -836,11 +931,17 @@ for num in range(0,num_simulations):
                 for j in range(len(gxp['poc'])):
                     if dem['dem_poc'][-1] == gxp['poc'][j]:
                         gxp_price_array = np.array(gxp['price'][j])  # shape: (n, 12)
-                        # print(gxp_price_array)
-                        dem['fpvv'].append([p * assumed_cost_coefficient for p in gxp_price_array])
+                        if time_resolution == "monthly":
+                            dem['fpvv'].append([p * assumed_cost_coefficient for p in gxp_price_array])
+                        elif time_resolution == "hourly":
+                            
+                            dem['fpvv'].append([p for p in gxp_price_array])
+                        
+                        # print(dem['fpvv'])
+
+                    
                         # print(dem['fpvv'][-1])
                         break
-
                         # dem['fpvv'].append(gxp['price'][j]*assumed_cost_coefficient)
                 for l in range(len(time_multiplier)):
                     G.add_node("M" + str(dem["index"][-1]) + str(103) + str(time_multiplier[l]),
@@ -850,12 +951,12 @@ for num in range(0,num_simulations):
                             units=mat_units_GWh)  # fix according to location
                     
                     if dem["dem_ind"][-1] != "Pulp" and dem['dem_ind'][-1] != "Wood Processing":
-                    
+
                         G.add_node("O" + str(dem["index"][-1]) + str(103) + str(time_multiplier[l]),
                                 names="O" + str(dem["index"][-1]) + str(103) + str(time_multiplier[l]), fix_cost=0, proportional_cost=dem['fpvv'][-1][l]*1000)  # lines charge 41.46NZD/kVA 1E6/(dem_hours[-1])*lines_charges
                     else:
                         G.add_node("O" + str(dem["index"][-1]) + str(103) + str(time_multiplier[l]),
-                                names="O" + str(dem["index"][-1]) + str(103) + str(time_multiplier[l]), fix_cost=0, proportional_cost=dem['fpvv'][-1][l]*1000*1e7)  #full electrification *1e7 lines charge 41.46NZD/kVA 1E6/(dem_hours[-1])*lines_charges                          
+                                names="O" + str(dem["index"][-1]) + str(103) + str(time_multiplier[l]), fix_cost=0, proportional_cost=dem['fpvv'][-1][l]*1000*1e7)  # lines charge 41.46NZD/kVA 1E6/(dem_hours[-1])*lines_charges                          
                         
                     G.add_edge("O" + str(dem["index"][-1]) + str(103) + str(time_multiplier[l]),
                             "M" + str(dem["index"][-1]) + str(103) + str(time_multiplier[l]), weight=1)
@@ -870,18 +971,16 @@ for num in range(0,num_simulations):
     
     # demand to poc
     # poc to factory
-    behind_gxp_not_needed = {
-        str(gxp['index'][jj])
-        for jj in range(len(gxp['index']))
-    }
+    behind_gxp_not_needed = {str(gxp['index'][jj]) for jj in range(len(gxp['index']))}
+    # print(behind_gxp_not_needed)
     for kk in range(len(dem["dem_name"])):
         for jj in range(len(gxp['poc'])):
             if str(dem["dem_poc"][kk]) == str(gxp['poc'][jj]):
                 behind_gxp_not_needed.discard(str(gxp['index'][jj]))
                 for l in range(len(time_multiplier)):
-                    
                     G.add_edge("M" + str(gxp['index'][jj] +600) + str(time_multiplier[l]),
                             "O" + str(dem["index"][kk]) + str(103) + str(time_multiplier[l]), weight=1.035)
+                    
     for jj in range(len(gxp['poc'])):        
         if gxp['dem'][jj] !=0:
             behind_gxp_not_needed.discard(str(gxp['index'][jj]))
@@ -909,14 +1008,20 @@ for num in range(0,num_simulations):
                 
        
     # factory conditions
-    industrial_data, industry = pandas_to_dict(df)
-
-    cop = [4.572445696, 2.685323156, 1.733107565, 0.99, 0.99]
+    industrial_data, industry = pandas_to_dict(df_industrial_curve)
+    # print('industrial_data',industrial_data)
+    cop = [4.572445696, 2.685323156, 1.733107565, 0.99, 0.99] #heating electric tech
     proportional_cost_heat = [ 274631.3545 ,274631.3545 ,274631.3545, 147848.4974 ,147848.4974 ]
 
+    # print('Generating industrial demand profiles...')
+    # print(industrial_data)
+    # print(industry)
 
     dem_resolution_UF = {}
-    hours_per_month = [744, 672, 744, 720, 744, 720, 744, 744, 720, 744, 720, 743]  # hours in each month of the year
+    if time_resolution == "monthly":
+        hours_per_month = [744, 672, 744, 720, 744, 720, 744, 744, 720, 744, 720, 743]  # hours in each month of the year
+    elif time_resolution == "hourly":
+        pass
     # print(len(dem["dem_name"]))
     # print((industry))
     for i in range(len(dem["dem_name"])):
@@ -924,25 +1029,29 @@ for num in range(0,num_simulations):
         for j in range(len(industry)):
             # print(str(dem["dem_ind"][i]),"--",str(industry[j]))
             if str(dem["dem_ind"][i]) == str(industry[j]):  # match demand file with industry file
-                dem_resolution_UF[dem["index"][i]] = np.divide(industrial_data[industry[j]], 730).tolist()
-                # print(industrial_data)
-    # print(str(dem["dem_ind"]))
-    # print(str(industry))
-    # print('ll',dem_resolution_UF)
-    # print('aggregated_dem_dict',aggregated_dem_dict)
-    # print(dem_profile_price)
+                if time_resolution == "monthly":
+                    dem_resolution_UF[dem["index"][i]] = np.divide(industrial_data[industry[j]], 730).tolist()
+                elif time_resolution == "hourly":
+                    dem_resolution_UF[dem["index"][i]] = industrial_data[industry[j]]
+
+    
+    # print('dem_resolution_UF',dem_resolution_UF)
+    
     dem_time_period_profile = {}
     for j, k in aggregated_dem_dict.items():
         if time_resolution == 'hourly':
             for l in range(len(time_multiplier)):
-                dem_profile = dem_resolution_UF[j][0] #which quarterly?
-                dem_time_period_profile[j, time_multiplier[l]] = (np.array(aggregated_dem_dict[j]) * dem_profile/8760).tolist()
+                dem_profile = dem_resolution_UF[j][l] 
+                # print('dem_profile',dem_profile)
+                dem_time_period_profile[j, time_multiplier[l]] = (np.array(aggregated_dem_dict[j]) * dem_profile/8760 *4 ).tolist() #4hourly
         elif time_resolution == 'monthly':
             for l in range(len(time_multiplier)):
                 dem_profile = dem_resolution_UF[j][l]
                 dem_time_period_profile[j, time_multiplier[l]] = (np.array(aggregated_dem_dict[j]) * dem_profile/12).tolist()
 
+    # print('dem_profile',dem_profile)
     # print('dem_time_period_profile',dem_time_period_profile)
+    # print('aggregated_dem_dict',aggregated_dem_dict)
 
     dem_by_index_tech_monthly = {}
     for i in dem["index"]:
@@ -970,14 +1079,10 @@ for num in range(0,num_simulations):
                 for l in range(len(time_multiplier)):  # o119+time m124+time o134 m1191+time m1192+time
                     G.add_node("M" + str(dem["index"][i]) + str(104 + j) + str(time_multiplier[l]),
                                 names="M" + str(dem["index"][i]) + str(104 + j) + str(time_multiplier[l]),
-                                type='intermediate',
-                                flow_rate_lower_bound=0,
-                                flow_rate_upper_bound=1e6, price=0,
-                                units=mat_units_GWh)  # M104
+                                type='intermediate',flow_rate_lower_bound=0,flow_rate_upper_bound=1e6, price=0,units=mat_units_GWh)  # M104
 
                     #print("O" + str(dem["index"][i]) + str(119 + j) + str(time_multiplier[l]),':',dem_profile_price[dem["index"][i], time_multiplier[l]])
-                    G.add_node("O" + str(dem["index"][i]) + str(119 + j) + str(time_multiplier[l]),
-                            names="O" + str(dem["index"][i]) + str(119 + j) + str(time_multiplier[l]),
+                    G.add_node("O" + str(dem["index"][i]) + str(119 + j) + str(time_multiplier[l]), names="O" + str(dem["index"][i]) + str(119 + j) + str(time_multiplier[l]),
                             **proportional_cost_op)  # o119 electric
                     
                     #hot water storage?
@@ -999,7 +1104,7 @@ for num in range(0,num_simulations):
                                 names="M" + str(dem["index"][i]) + str(124 + j) + str(time_multiplier[l]),
                                 type='product',
                                 flow_rate_lower_bound=dem_by_index_tech_monthly[dem["index"][i], j][l],
-                                flow_rate_upper_bound=1.01*dem_by_index_tech_monthly[dem["index"][i], j][l], price=100,
+                                flow_rate_upper_bound=1.01*dem_by_index_tech_monthly[dem["index"][i], j][l], price=0,
                                 units=mat_units_GWh)  # M124
                         demand_product_nodes.add("M" + str(dem["index"][i]) + str(124 + j))
                         
@@ -1043,7 +1148,7 @@ for num in range(0,num_simulations):
                                 "M" + str(dem["index"][i]) + str(119 + j) + str(2) + str(time_multiplier[l]), weight=0.8*730/1000)
                     elif time_resolution == "hourly":
                         G.add_edge("O" + str(dem["index"][i]) + str(134 + j),
-                                "M" + str(dem["index"][i]) + str(119 + j) + str(2) + str(time_multiplier[l]), weight=0.8/1000)
+                                "M" + str(dem["index"][i]) + str(119 + j) + str(2) + str(time_multiplier[l]), weight=0.8*4/1000)
                         
                     G.add_edge("M" + str(dem["index"][i]) + str(119 + j) + str(2) + str(time_multiplier[l]),
                             "O" + str(dem["index"][i]) + str(119 + j) + str(time_multiplier[l]),
@@ -1066,7 +1171,7 @@ for num in range(0,num_simulations):
                                     names="M" + str(dem["index"][i]) + str(124 + j) + str(time_multiplier[l]),
                                     type='product',
                                     flow_rate_lower_bound=dem_by_index_tech_monthly[dem["index"][i], j][l],
-                                    flow_rate_upper_bound=1.01*dem_by_index_tech_monthly[dem["index"][i], j][l], price=100,
+                                    flow_rate_upper_bound=1.01*dem_by_index_tech_monthly[dem["index"][i], j][l], price=0,
                                     units=mat_units_GWh)  # M124
                         demand_product_nodes.add("M" + str(dem["index"][i]) + str(124 + j))
 
@@ -1100,9 +1205,8 @@ for num in range(0,num_simulations):
                     G.add_edge("O" + str(dem["index"][i]) + str(129 + j) + str(time_multiplier[l]),
                             "M" + str(dem["index"][i]) + str(104 + j) + str(time_multiplier[l]), weight=0.95)  # o129 m124
                     # print('heat transfer',j,l)
+                    
 
-
-        
     # tech display
     demand_product_nodes = set()   # ← create the empty set
 
@@ -1112,8 +1216,8 @@ for num in range(0,num_simulations):
                 heat_technology(i, a)
                 heat_transfer(i, a)
                 break
-                
-            
+    
+
     biomass_properties = {"resource_type": ['Inforest harvest', 'K_logs', 'Sawmill chip', 'Straw_and_Stover', 'Pellets'],
         "raw_material_cost_north_nzd_per_ton": [70.7, 113, 108,  75, 484],
         "raw_material_cost_south_nzd_per_ton": [76, 123, 48,  75, 484],
@@ -1125,18 +1229,13 @@ for num in range(0,num_simulations):
         "L2":[0.65/0.8,0.8/0.95,0.6/0.7,0.5/0.75,1], #0.65,0.8,0.6,0.5
         "biomass_distance_cost_constant":[0.0000981818181818182,0.000156521739130435,0.000156521739130435,0.0000805970149253731,0.0000617142857142857]}#NZD/MWh
 
-    # biomass_distance_cost_constant = 1.575e-3 #1.575 #NZD/MWh m #5.714e-5 #GJ to MWh into account
+
+    biomass_distance_cost_constant = 1.575e-3 #1.575 #NZD/MWh m #5.714e-5 #GJ to MWh into account
     
     biomass_heat_proportional_cost = [125864.2392 ,  308017.703]
     biomass_heat_efficiency = [0.8, 0.75]
-    
-    level = "L0"
-    level_factors = biomass_properties[level]
 
-    methanol_plant_op_cost = 700 #NZD/y/ton # 666.67 #NZD/y/ton #
-        
-    methanol_selling_price = 0 #USD400/MT    
-            
+
     # biomass works #starts from 1 not 0
     # to convert biomass resource allocated to plants id20
     unique_list = {'name': [], 'biomass_fac_index': [],'island':[], '0': [], '1': [],'2': [], '3': [], '4': []}
@@ -1154,67 +1253,68 @@ for num in range(0,num_simulations):
                 Pd_bio_gen.Source_ID[index] in gen["reference"]):
             if item not in unique_list1['biomass_gen_index']:
                 unique_list1['biomass_gen_index'].append(item)
-    # print(Pd_bio_gen.North_South[1:100],"Pd_bio_gen.North_South")
+
     unique_list['biomass_fac_index'].sort()
     unique_list1['biomass_gen_index'].sort()
     
+    level = "L0"
+    level_factors = biomass_properties[level]
     # print(unique_list)
     # print(unique_list1)
 
     for j in range(len(unique_list['biomass_fac_index'])):
-        for i in range(len(Pd_bio_on.Row_Labels)):
-            if Pd_bio_on.North_South[i] != island:
-                if (unique_list['biomass_fac_index'][j] == Pd_bio_on.ORIG_ID[i]):
-                    if time_resolution == 'hourly':
-                        unique_list['island'].append(Pd_bio_on.North_South[i])
-                        unique_list['0'].append(Pd_bio_on.Inforest_harvest[i]/8760*time_period)
-                        unique_list['1'].append(Pd_bio_on.K_logs[i]/8760*time_period)
-                        unique_list['2'].append(Pd_bio_on.Sawmill_chip[i]/8760*time_period)
-                        unique_list['3'].append(Pd_bio_on.Straw_and_Stover[i]/8760*time_period)                        
-                        unique_list['4'].append(Pd_bio_on.Pellets[i]/8760*time_period)
+        for i in range(len(Pd_bio.Row_Labels)):
+            if Pd_bio.North_South[i] != island:
+                if (unique_list['biomass_fac_index'][j] == Pd_bio.ORIG_ID[i]):
+                    if time_resolution == 'hourly': #4hourly
+                        unique_list['island'].append(Pd_bio.North_South[i])
+                        unique_list['0'].append(Pd_bio.Inforest_harvest[i]/8760*4*time_period *level_factors[0])
+                        unique_list['1'].append(Pd_bio.K_logs[i]/8760*4*time_period*level_factors[1])
+                        unique_list['2'].append(Pd_bio.Sawmill_chip[i]/8760*4*time_period*level_factors[2])
+                        unique_list['3'].append(Pd_bio.Straw_and_Stover[i]/8760*4*time_period*level_factors[3])                        
+                        unique_list['4'].append(Pd_bio.Pellets[i]/8760*4*time_period*level_factors[4])
                     
-                        unique_list['name'].append(Pd_bio_on.Row_Labels[i])
+                        unique_list['name'].append(Pd_bio.Row_Labels[i])
                         # print("error not worked yet")
                     elif time_resolution == 'monthly':
-                        unique_list['island'].append(Pd_bio_on.North_South[i])
-                        # print("adding",Pd_bio_on.North_South[i])
-                        unique_list['0'].append(Pd_bio_on.Inforest_harvest[i]/12*time_period*level_factors[0])
-                        unique_list['1'].append(Pd_bio_on.K_logs[i]/12*time_period*level_factors[1])
-                        unique_list['2'].append(Pd_bio_on.Sawmill_chip[i]/12*time_period*level_factors[2])
-                        unique_list['3'].append(Pd_bio_on.Straw_and_Stover[i]/12*time_period*level_factors[3])                        
-                        unique_list['4'].append(Pd_bio_on.Pellets[i]/12*time_period*level_factors[4])
+                        unique_list['island'].append(Pd_bio.North_South[i])
+                        unique_list['0'].append(Pd_bio.Inforest_harvest[i]/12*time_period*level_factors[0])
+                        unique_list['1'].append(Pd_bio.K_logs[i]/12*time_period*level_factors[1])
+                        unique_list['2'].append(Pd_bio.Sawmill_chip[i]/12*time_period*level_factors[2])
+                        unique_list['3'].append(Pd_bio.Straw_and_Stover[i]/12*time_period*level_factors[3])                        
+                        unique_list['4'].append(Pd_bio.Pellets[i]/12*time_period*level_factors[4])
                         
-                        unique_list['name'].append(Pd_bio_on.Row_Labels[i])                        
+                        unique_list['name'].append(Pd_bio.Row_Labels[i])                        
                 else:
                     pass
-    # print("unique_list",unique_list)
+    # print(unique_list1)
 
     for j in range(len(unique_list1['biomass_gen_index'])):
-        for i in range(len(Pd_bio_on.Row_Labels)):
-            if Pd_bio_on.North_South[i] != island:
-                if (unique_list1['biomass_gen_index'][j] == Pd_bio_on.ORIG_ID[i]):
-                    if time_resolution == 'hourly':
-                        unique_list1['island'].append(Pd_bio_on.North_South[i])
-                        unique_list1['0'].append(Pd_bio_on.Inforest_harvest[i]/8760*time_period)
-                        unique_list1['1'].append(Pd_bio_on.K_logs[i]/8760*time_period)
-                        unique_list1['2'].append(Pd_bio_on.Sawmill_chip[i]/8760*time_period)
-                        unique_list1['3'].append(Pd_bio_on.Straw_and_Stover[i]/8760*time_period)
-                        unique_list1['4'].append(Pd_bio_on.Pellets[i]/8760*time_period)
+        for i in range(len(Pd_bio.Row_Labels)):
+            if Pd_bio.North_South[i] != island:
+                if (unique_list1['biomass_gen_index'][j] == Pd_bio.ORIG_ID[i]):
+                    if time_resolution == 'hourly': #4hourly
+                        unique_list1['island'].append(Pd_bio.North_South[i])
+                        unique_list1['0'].append(Pd_bio.Inforest_harvest[i]/8760*4*time_period*level_factors[0])
+                        unique_list1['1'].append(Pd_bio.K_logs[i]/8760*4*time_period*level_factors[1])
+                        unique_list1['2'].append(Pd_bio.Sawmill_chip[i]/8760*4*time_period*level_factors[2])
+                        unique_list1['3'].append(Pd_bio.Straw_and_Stover[i]/8760*4*time_period*level_factors[3])
+                        unique_list1['4'].append(Pd_bio.Pellets[i]/8760*4*time_period*level_factors[4])
                         
-                        unique_list1['name'].append(Pd_bio_on.Row_Labels[i])
+                        unique_list1['name'].append(Pd_bio.Row_Labels[i])
                         # print("error not worked yet")
                     elif time_resolution == 'monthly':
-                        unique_list1['island'].append(Pd_bio_on.North_South[i])
-                        unique_list1['0'].append(Pd_bio_on.Inforest_harvest[i]/12*time_period*level_factors[0])
-                        unique_list1['1'].append(Pd_bio_on.K_logs[i]/12*time_period*level_factors[1])
-                        unique_list1['2'].append(Pd_bio_on.Sawmill_chip[i]/12*time_period*level_factors[2])
-                        unique_list1['3'].append(Pd_bio_on.Straw_and_Stover[i]/12*time_period*level_factors[3])
-                        unique_list1['4'].append(Pd_bio_on.Pellets[i]/12*time_period*level_factors[4])
+                        unique_list1['island'].append(Pd_bio.North_South[i])
+                        unique_list1['0'].append(Pd_bio.Inforest_harvest[i]/12*time_period*level_factors[0])
+                        unique_list1['1'].append(Pd_bio.K_logs[i]/12*time_period*level_factors[1])
+                        unique_list1['2'].append(Pd_bio.Sawmill_chip[i]/12*time_period*level_factors[2])
+                        unique_list1['3'].append(Pd_bio.Straw_and_Stover[i]/12*time_period*level_factors[3])
+                        unique_list1['4'].append(Pd_bio.Pellets[i]/12*time_period*level_factors[4])
 
-                        unique_list1['name'].append(Pd_bio_on.Row_Labels[i])
+                        unique_list1['name'].append(Pd_bio.Row_Labels[i])
                 else:
                     pass
-    # print("unique_list1['island']",unique_list1['island'])
+    # print(unique_list1)
     # print(len(unique_list1["biomass_gen_index"]),len(unique_list["biomass_fac_index"]))
 
     unique_list2 = {'name': [], 'biomass_index': [],'island':[], '0': [], '1': [], '2': [], '3': [], '4': []}
@@ -1243,7 +1343,7 @@ for num in range(0,num_simulations):
             unique_list2['name'].append(unique_list1['name'][j])
             unique_list2['biomass_index'].append(unique_list1['biomass_gen_index'][j])
             if time_resolution == 'hourly':
-                unique_list2['island'].append(unique_list1['island'][j])
+                unique_list2['island'].append(unique_list['island'][j])
                 unique_list2['0'].append(unique_list1['0'][j])
                 unique_list2['1'].append(unique_list1['1'][j])
                 unique_list2['2'].append(unique_list1['2'][j])
@@ -1251,7 +1351,7 @@ for num in range(0,num_simulations):
                 unique_list2['4'].append(unique_list1['4'][j])
                 
             elif time_resolution == 'monthly':
-                unique_list2['island'].append(unique_list1['island'][j])       
+                unique_list2['island'].append(unique_list['island'][j])       
                 unique_list2['0'].append(unique_list1['0'][j])
                 unique_list2['1'].append(unique_list1['1'][j])
                 unique_list2['2'].append(unique_list1['2'][j])
@@ -1259,11 +1359,12 @@ for num in range(0,num_simulations):
                 unique_list2['4'].append(unique_list1['4'][j])
 
     unique_list2['biomass_index'].sort()
-    p=pd.DataFrame(unique_list2)
-    d= p.to_csv('biomass.csv')
-    
+    # p=pd.DataFrame(unique_list2)
+    # d= p.to_csv('biomass.csv')
 
 
+    methanol_plant_op_cost = 700 #NZD/y/ton # 666.67 #NZD/y/ton #
+    methanol_selling_price = 600 #USD400/MT
     
     def process_biomass_data(a=unique_list2, b=G, units=mat_units_GJ, d=mat_units_GJ, resource_id='0'):
         # resource_id is a string like '0','1','2','3','4'
@@ -1299,6 +1400,7 @@ for num in range(0,num_simulations):
                             unique_biomass_data['gen_id_biomass'].append(600 + gen['poc_index'][j])
                         elif gen['local'][j] == 0:
                             unique_biomass_data['gen_id_biomass'].append(10000 + Pd_bio_gen.Source_ID[i])
+                        # print(unique_biomass_data)
 
 
         for i in range(len(unique_biomass_data['gen_id_biomass'])):
@@ -1328,9 +1430,6 @@ for num in range(0,num_simulations):
                                     units=mat_units_GJ)
                             biomass_exists.add(biomass_id_str)  # store ID string consistently
                             # print("gen_bio",biomass_properties["raw_material_cost_south_nzd_per_ton"][resource_id]/biomass_properties["energy_content_gj_per_ton"][resource_id])
-                        else:
-                            print("no pass sad")
-                    
                     else:
                         pass
                 else:
@@ -1354,7 +1453,7 @@ for num in range(0,num_simulations):
                             names="O" + str(unique_biomass_data['gen_id_biomass'][i])+str(280),capacity_lower_bound=0,capacity_upper_bound=2000, fix_cost =0,proportional_cost = methanol_plant_op_cost*time_period)  # methanol plant
                 elif time_resolution == 'hourly':
                     G.add_node("O" + str(unique_biomass_data['gen_id_biomass'][i])+str(280),
-                            names="O" + str(unique_biomass_data['gen_id_biomass'][i])+str(280), fix_cost =0,proportional_cost = methanol_plant_op_cost*time_period)  # methanol plant
+                            names="O" + str(unique_biomass_data['gen_id_biomass'][i])+str(280), capacity_lower_bound=0,capacity_upper_bound=2000/730*4, fix_cost =0,proportional_cost = methanol_plant_op_cost*time_period)  # methanol plant
                     
             G.add_edge("O" + str(unique_biomass_data['biomass_id'][i]) + str(unique_biomass_data['gen_id_biomass'][i]),
                         item, weight=1)
@@ -1455,6 +1554,7 @@ for num in range(0,num_simulations):
                 G.add_edge("M" + str(unique_biomass_data['gen_id_biomass'][i])+str(290) + str(time_multiplier[l]),
                         "O" + str(unique_biomass_data['gen_id_biomass'][i])+str(250) + str(time_multiplier[l]), weight=1)
 
+        # print('bgi biomass_exists',biomass_exists)
         # print('generation_exists',generation_exists)
         # print(unique_biomass_data['gen_id_biomass'])
         return unique_biomass_data,biomass_exists,generation_exists
@@ -1465,7 +1565,7 @@ for num in range(0,num_simulations):
         generation_exists = gen_existing if gen_existing is not None else set() #prevent over defining the generation side (destination)
         biomass_exists = bio_existing if bio_existing is not None else set()  #prevent over define biomass resource #need to wip update
         text1_exists = set()
-        # print("unique_list2",unique_list2)
+        
         for i in range(len(Pd_bio_gen.Biomass_ID)):
             if (10000 + Pd_bio_gen.Source_ID[i] in gen["index"]) and (Pd_bio_gen.North_South[i] != island) and (
                     Pd_bio_gen.Distance[i] <= distance_constraint) and (
@@ -1486,6 +1586,7 @@ for num in range(0,num_simulations):
                     biomass_id_str = str(unique_biomass_data['biomass_id'][i])
                     biomass_location = unique_biomass_data['island'][i]
                     text = "M" + biomass_id_str
+
                     if biomass_id_str not in biomass_exists:
                         if biomass_location == 'North':
                             biomass_resource_price = biomass_properties["raw_material_cost_north_nzd_per_ton"][resource_id]/biomass_properties["energy_content_gj_per_ton"][resource_id]
@@ -1502,39 +1603,36 @@ for num in range(0,num_simulations):
                                 price=biomass_resource_price,units=mat_units_GJ) #nzd/GJ
                             biomass_exists.add(biomass_id_str)
                             # print("gen_bio2",biomass_properties["raw_material_cost_south_nzd_per_ton"][resource_id]/biomass_properties["energy_content_gj_per_ton"][resource_id])
-                        else:
-                            print("no pass")  
+                            
+                        # print(text)
+                        # print(biomass_exists)
 
                     else:
                         pass
                 else:
                     pass
-        for i in range(len(unique_biomass_data['gen_id_fuel'])):        
-                # print(unique_biomass_data)
-                # print(unique_biomass_data['biomass_id'][i])
-                # print(unique_biomass_data['gen_id_fuel'][i])
-                #connect biomass with gen_fuel
-                G.add_node("O" + str(unique_biomass_data['biomass_id'][i]) +str(300)+ str(unique_biomass_data['gen_id_fuel'][i]), names= "O"+ str(unique_biomass_data['biomass_id'][i])  +str(300)
-                                + str(unique_biomass_data['gen_id_fuel'][i]), fix_cost=0, proportional_cost=unique_biomass_data['biomass_distance'][i] * biomass_properties['biomass_distance_cost_constant'][resource_id])
-                G.add_edge("M" + str(unique_biomass_data['biomass_id'][i]),"O" + str(unique_biomass_data['biomass_id'][i]) +str(300)+ str(unique_biomass_data['gen_id_fuel'][i]),weight=3.6)
-                G.add_edge("O" + str(unique_biomass_data['biomass_id'][i]) +str(300)+ str(unique_biomass_data['gen_id_fuel'][i]),"M"+ str(unique_biomass_data['gen_id_fuel'][i]+1000),weight=1)
 
-                #new fix 5/2/2026 add product node for bio as thermal use 0.99 for prod to be prevent rounding errors
-                node_id = "M" + str(unique_biomass_data['biomass_id'][i])
-                        
-                biomass_resource_price_2 = G.nodes["M" + str(unique_biomass_data['biomass_id'][i])]["price"]
-                G.add_node("M" + str(unique_biomass_data['biomass_id'][i]) +str(400)+ str(unique_biomass_data['gen_id_fuel'][i]),names="M" + str(unique_biomass_data['biomass_id'][i]) +str(400)+ str(unique_biomass_data['gen_id_fuel'][i]),type='product', flow_rate_lower_bound=0, flow_rate_upper_bound=1e8, price=1.01*(unique_biomass_data['biomass_distance'][i] * biomass_properties['biomass_distance_cost_constant'][resource_id]+biomass_resource_price_2*3.6), units=mat_units_MWh) #warning 0.99 is right
-                # print("O" + str(unique_biomass_data['biomass_id'][i]))
-                G.add_edge("O" + str(unique_biomass_data['biomass_id'][i]) +str(300)+ str(unique_biomass_data['gen_id_fuel'][i]),"M" + str(unique_biomass_data['biomass_id'][i]) +str(400)+ str(unique_biomass_data['gen_id_fuel'][i]),weight=1)
-                    
-                if G.has_node("M"+ str(unique_biomass_data['gen_id_fuel'][i]+6000)) is True:
-                    G.remove_node("M"+ str(unique_biomass_data['gen_id_fuel'][i]+6000))
-                    G.remove_node("O"+ str(unique_biomass_data['gen_id_fuel'][i]))
+            #connect biomass with gen_fuel
+            G.add_node("O" + str(unique_biomass_data['biomass_id'][i]) +str(300)+ str(unique_biomass_data['gen_id_fuel'][i]), names= "O"+ str(unique_biomass_data['biomass_id'][i])  +str(300)
+                       + str(unique_biomass_data['gen_id_fuel'][i]), fix_cost=0, proportional_cost=unique_biomass_data['biomass_distance'][i] * biomass_properties['biomass_distance_cost_constant'][resource_id])
+            G.add_edge("M" + str(unique_biomass_data['biomass_id'][i]),"O" + str(unique_biomass_data['biomass_id'][i]) +str(300)+ str(unique_biomass_data['gen_id_fuel'][i]),weight=3.6)
+            G.add_edge("O" + str(unique_biomass_data['biomass_id'][i]) +str(300)+ str(unique_biomass_data['gen_id_fuel'][i]),"M"+ str(unique_biomass_data['gen_id_fuel'][i]+1000),weight=1)
+
+            #new fix 5/2/2026 add product node for bio as thermal use 0.99 for prod to be prevent rounding errors
+            biomass_resource_price_2 = G.nodes["M" + str(unique_biomass_data['biomass_id'][i])]["price"]
+            G.add_node("M" + str(unique_biomass_data['biomass_id'][i]) +str(400)+ str(unique_biomass_data['gen_id_fuel'][i]),names="M" + str(unique_biomass_data['biomass_id'][i]) +str(400)+ str(unique_biomass_data['gen_id_fuel'][i]),type='product', flow_rate_lower_bound=0, flow_rate_upper_bound=1e8, price=0.999*(unique_biomass_data['biomass_distance'][i] * biomass_properties['biomass_distance_cost_constant'][resource_id]+biomass_resource_price_2*3.6), units=mat_units_MWh)
+            # print("O" + str(unique_biomass_data['biomass_id'][i]))
+            G.add_edge("O" + str(unique_biomass_data['biomass_id'][i]) +str(300)+ str(unique_biomass_data['gen_id_fuel'][i]),"M" + str(unique_biomass_data['biomass_id'][i]) +str(400)+ str(unique_biomass_data['gen_id_fuel'][i]),weight=1)
+            
+            if G.has_node("M"+ str(unique_biomass_data['gen_id_fuel'][i]+6000)) is True:
+
+                G.remove_node("M"+ str(unique_biomass_data['gen_id_fuel'][i]+6000))
+                G.remove_node("O"+ str(unique_biomass_data['gen_id_fuel'][i]))
             
             # print('bgf biomass_exists',biomass_exists)
             # print('generation_exists',generation_exists)            
             # print(unique_biomass_data['gen_id_fuel'])
-        return unique_biomass_data,biomass_exists,generation_exists
+            return unique_biomass_data,biomass_exists,generation_exists
 
 
 
@@ -1660,7 +1758,7 @@ for num in range(0,num_simulations):
                         elif time_resolution == 'hourly':
                             G.add_edge("O" + str(unique_biomass_data['fac_id_biomass'][-1]) + str(142 + biomass_properties["boiler"][resource_id]),
                                     "M" + str(unique_biomass_data['fac_id_biomass'][-1]) + str(140 + biomass_properties["boiler"][resource_id]) + str(
-                                        2) + str(time_multiplier[l]), weight=0.8/1000)                        
+                                        2) + str(time_multiplier[l]), weight=0.8/1000*4)                        
                         G.add_edge(
                             "M" + str(unique_biomass_data['fac_id_biomass'][-1]) + str(140 + biomass_properties["boiler"][resource_id]) + str(2) + str(
                                 time_multiplier[l]),
@@ -1673,7 +1771,7 @@ for num in range(0,num_simulations):
                         G.add_edge("O" + str(unique_biomass_data['fac_id_biomass'][-1]) + str(140 + biomass_properties["boiler"][resource_id]) + str(
                             time_multiplier[l]), "M" + str(unique_biomass_data['fac_id_biomass'][-1]) + str(144) + str(
                             time_multiplier[l]), weight=biomass_heat_efficiency[biomass_properties['boiler'][resource_id]])
-                cascade_heat_eff_loss = [1,0.995,0.99,0.985,0.98] #cascade heat efficiency loss    
+                cascade_heat_eff_loss = [1,0.99,0.98,0.97,0.96] #cascade heat efficiency loss    
 
                 # print(demand_product_nodes)
                 for m in range(0,5):
@@ -1684,7 +1782,6 @@ for num in range(0,num_simulations):
                             G.add_node("O" + str(unique_biomass_data['fac_id_biomass'][-1]) + str(145 + m) + str(time_multiplier[l]),names="O" + str(unique_biomass_data['fac_id_biomass'][-1]) + str(145 + m) + str(time_multiplier[l]),**proportional_cost_op)        
                             G.add_edge("M" + str(unique_biomass_data['fac_id_biomass'][-1]) + str(144) + str(time_multiplier[l]),"O" + str(unique_biomass_data['fac_id_biomass'][-1]) + str(145 + m) + str(time_multiplier[l]),weight=1)
                             G.add_edge("O" + str(unique_biomass_data['fac_id_biomass'][-1]) + str(145 + m) + str(time_multiplier[l]),"M" + str(unique_biomass_data['fac_id_biomass'][-1]) + str(124 + m) + str(time_multiplier[l]),weight=cascade_heat_eff_loss[m])
-                            
                             
         # print('bfac biomass_exists',biomass_existing)
                                 
@@ -1702,7 +1799,7 @@ for num in range(0,num_simulations):
                             capacity_upper_bound=dem_coal_boilers["coal_capacity"][i]*dem_coal_boilers["dem_hours"][i]/8760*8760*time_period/12/1000,  fix_cost=1, proportional_cost=coal_boiler_retrofit_cost_nzd_per_MW/12*time_period)
                 elif time_resolution == 'hourly': #wip
                     G.add_node("O"+str(dem_coal_boilers["index"][i])+str(162), names="O"+str(dem_coal_boilers["index"][i])+str(162),capacity_lower_bound=0,
-                            capacity_upper_bound=dem_coal_boilers["coal_capacity"][i]*dem_coal_boilers["dem_hours"][i],  fix_cost=1, proportional_cost=coal_boiler_retrofit_cost_nzd_per_MW/8760*time_period)
+                            capacity_upper_bound=dem_coal_boilers["coal_capacity"][i],  fix_cost=1, proportional_cost=coal_boiler_retrofit_cost_nzd_per_MW/8760*time_period)
                 
                 for l in range(len(time_multiplier)):
                     G.add_node("O"+str(dem_coal_boilers["index"][i])+str(160)+str(time_multiplier[l]), names="O"+str(dem_coal_boilers["index"][i])+str(160)+str(time_multiplier[l]), **proportional_cost_op)
@@ -1714,8 +1811,8 @@ for num in range(0,num_simulations):
                     G.add_edge("M"+str(dem_coal_boilers["index"][i])+str(160)+str(1)+str(time_multiplier[l]), "O"+str(dem_coal_boilers["index"][i])+str(162), weight=1e-7)
                     if time_resolution == 'monthly':
                         G.add_edge("O"+str(dem_coal_boilers["index"][i])+str(162), "M"+str(dem_coal_boilers["index"][i])+str(160)+str(2)+str(time_multiplier[l]), weight=0.8*730/1000)
-                    elif time_resolution == 'hourly':
-                        G.add_edge("O"+str(dem_coal_boilers["index"][i])+str(162), "M"+str(dem_coal_boilers["index"][i])+str(160)+str(2)+str(time_multiplier[l]), weight=0.8/1000)
+                    elif time_resolution == 'hourly': #4hourly
+                        G.add_edge("O"+str(dem_coal_boilers["index"][i])+str(162), "M"+str(dem_coal_boilers["index"][i])+str(160)+str(2)+str(time_multiplier[l]), weight=0.8/1000*4)
                     G.add_edge("M"+str(dem_coal_boilers["index"][i])+str(160)+str(2)+str(time_multiplier[l]), "O"+str(dem_coal_boilers["index"][i])+str(160)+str(time_multiplier[l]), weight=1)
                     
                     G.add_edge("O"+str(dem_coal_boilers["index"][i])+str(160)+str(time_multiplier[l]), "M"+str(dem_coal_boilers["index"][i])+str(144)+str(time_multiplier[l]), weight=coal_efficiency)
@@ -1740,83 +1837,123 @@ for num in range(0,num_simulations):
                 "bio_exi": bio_exi, "gen_exi": gen_exi,}
 
         return results
- 
-    Pd_keys = ['Index', 'ObjectID', "Available storage GWh", "North_South"]
-    Pd_hydro_st = python_dict_dot_notation(Pd_keys, Pd_hydro)
 
-    hydro = {"index":[],"gen_id":[],"storage":[], "island":[],}
-    for i in range(len(Pd_hydro_st.Index)):
-        if Pd_hydro_st.North_South[i] != island and Pd_hydro_st.ObjectID[i] in gen["index"]:
-            hydro["index"].append(Pd_hydro_st.Index[i])
-            hydro["gen_id"].append(Pd_hydro_st.ObjectID[i])
-            hydro["storage"].append(Pd_hydro_st["Available storage GWh"][i])
-    for i in range(len(hydro["index"])):
-        G.add_node("O"+str(16000+hydro["gen_id"][i])+str(3), names = "O"+str(16000+hydro["gen_id"][i])+str(3), capacity_lower_bound=0,
-                    capacity_upper_bound=hydro["storage"][i], fix_cost=0, proportional_cost=0)   
-        for l in range(len(time_multiplier)):
-            next_l = (l + 1) % len(time_multiplier)  # wraps last to first
+    if time_resolution == "monthly":
+        Pd_keys = ['Index', 'ObjectID', "Available storage GWh", "North_South"]
+        Pd_hydro_st = python_dict_dot_notation(Pd_keys, Pd_hydro)
 
-            G.add_node("O"+str(16000+hydro["gen_id"][i])+str(1)+str(time_multiplier[l]), names = "O"+str(16000+hydro["gen_id"][i])+str(1)+str(time_multiplier[l]), capacity_lower_bound=0,
-                    capacity_upper_bound=1e8, fix_cost=0, proportional_cost=0)
-            G.add_node("M"+str(16000+hydro["gen_id"][i])+str(2)+str(time_multiplier[l]), names= "M"+str(16000+hydro["gen_id"][i])+str(2)+str(time_multiplier[l]),flow_rate_lower_bound=0, flow_rate_upper_bound=1e8, price=0, units=mat_units_GWh,type='intermediate')
-            G.add_node("M"+str(16000+hydro["gen_id"][i])+str(4)+str(time_multiplier[l]), names= "M"+str(16000+hydro["gen_id"][i])+str(4)+str(time_multiplier[l]),flow_rate_lower_bound=0, flow_rate_upper_bound=1e8, price=0, units=mat_units_GWh,type='intermediate')
+        hydro = {"index":[],"gen_id":[],"storage":[], "island":[],}
+        for i in range(len(Pd_hydro_st.Index)):
+            if Pd_hydro_st.North_South[i] != island and Pd_hydro_st.ObjectID[i] in gen["index"]:
+                hydro["index"].append(Pd_hydro_st.Index[i])
+                hydro["gen_id"].append(Pd_hydro_st.ObjectID[i])
+                hydro["storage"].append(Pd_hydro_st["Available storage GWh"][i])
+        for i in range(len(hydro["index"])):
+            G.add_node("O"+str(16000+hydro["gen_id"][i])+str(3), names = "O"+str(16000+hydro["gen_id"][i])+str(3), capacity_lower_bound=0,
+                        capacity_upper_bound=hydro["storage"][i], fix_cost=0, proportional_cost=0)   
+            for l in range(len(time_multiplier)):
+                next_l = (l + 1) % len(time_multiplier)  # wraps last to first
 
-            G.add_edge("M"+str(17000+hydro["gen_id"][i])+str(time_multiplier[l]),"O"+str(16000+hydro["gen_id"][i])+str(1)+str(time_multiplier[l]),weight=1)
-            G.add_edge("O"+str(16000+hydro["gen_id"][i])+str(1)+str(time_multiplier[l]),"M"+str(16000+hydro["gen_id"][i])+str(2)+str(time_multiplier[l]),weight=1)
-            G.add_edge("M"+str(16000+hydro["gen_id"][i])+str(2)+str(time_multiplier[l]),"O"+str(16000+hydro["gen_id"][i])+str(3),weight=1e-7)
-            G.add_edge("O"+str(16000+hydro["gen_id"][i])+str(3),"M"+str(16000+hydro["gen_id"][i])+str(4)+str(time_multiplier[l]),weight=1)
-            G.add_edge("M"+str(16000+hydro["gen_id"][i])+str(4)+str(time_multiplier[l]),"O"+str(16000+hydro["gen_id"][i])+str(1)+str(time_multiplier[l]),weight=1)
+                G.add_node("O"+str(16000+hydro["gen_id"][i])+str(1)+str(time_multiplier[l]), names = "O"+str(16000+hydro["gen_id"][i])+str(1)+str(time_multiplier[l]), capacity_lower_bound=0,
+                        capacity_upper_bound=1e8, fix_cost=0, proportional_cost=0)
+                G.add_node("M"+str(16000+hydro["gen_id"][i])+str(2)+str(time_multiplier[l]), names= "M"+str(16000+hydro["gen_id"][i])+str(2)+str(time_multiplier[l]),flow_rate_lower_bound=0, flow_rate_upper_bound=1e8, price=0, units=mat_units_GWh,type='intermediate')
+                G.add_node("M"+str(16000+hydro["gen_id"][i])+str(4)+str(time_multiplier[l]), names= "M"+str(16000+hydro["gen_id"][i])+str(4)+str(time_multiplier[l]),flow_rate_lower_bound=0, flow_rate_upper_bound=1e8, price=0, units=mat_units_GWh,type='intermediate')
 
-            # cyclic link — last period loops to first
-            G.add_edge("O" + str(16000 + hydro["gen_id"][i]) + str(1) + str(time_multiplier[l]),"M" + str(17000 + hydro["gen_id"][i]) + str(time_multiplier[next_l]),weight=0.99)
+                G.add_edge("M"+str(17000+hydro["gen_id"][i])+str(time_multiplier[l]),"O"+str(16000+hydro["gen_id"][i])+str(1)+str(time_multiplier[l]),weight=1)
+                G.add_edge("O"+str(16000+hydro["gen_id"][i])+str(1)+str(time_multiplier[l]),"M"+str(16000+hydro["gen_id"][i])+str(2)+str(time_multiplier[l]),weight=1)
+                G.add_edge("M"+str(16000+hydro["gen_id"][i])+str(2)+str(time_multiplier[l]),"O"+str(16000+hydro["gen_id"][i])+str(3),weight=1e-7)
+                G.add_edge("O"+str(16000+hydro["gen_id"][i])+str(3),"M"+str(16000+hydro["gen_id"][i])+str(4)+str(time_multiplier[l]),weight=1)
+                G.add_edge("M"+str(16000+hydro["gen_id"][i])+str(4)+str(time_multiplier[l]),"O"+str(16000+hydro["gen_id"][i])+str(1)+str(time_multiplier[l]),weight=1)
+
+                # cyclic link — last period loops to first
+                G.add_edge("O" + str(16000 + hydro["gen_id"][i]) + str(1) + str(time_multiplier[l]),"M" + str(17000 + hydro["gen_id"][i]) + str(time_multiplier[next_l]),weight=0.99)
+
+
+    #heating water 
+    if time_resolution == "hourly":
+        #hot water storage from electric heating
+        for i in range(len(dem["index"])):          
+            G.add_node("O"+str(dem["index"][i])+str(179), names="O"+str(dem["index"][i])+str(179)
+                        ,capacity_lower_bound=0, capacity_upper_bound=1e6, proportional_cost=29059.5646,fix_cost=0, units=mat_units_GWh)  
+            G.add_node("O"+str(dem["index"][i])+str(180), names="O"+str(dem["index"][i])+str(180)
+                        ,capacity_lower_bound=0, capacity_upper_bound=1e6, proportional_cost=29059.5646,fix_cost=0, units=mat_units_GWh)          
+            for l in range(len(time_multiplier)):
+                for a in range(4): #electric to heat low temp
+                    if G.has_node("M"+str(dem["index"][i])+str(104+a)+str(time_multiplier[l])):
+                        G.add_node("O"+str(dem["index"][i])+str(165+a)+str(time_multiplier[l]), names="O"+str(dem["index"][i])+str(165+a)+str(time_multiplier[l])
+                        ,capacity_lower_bound=0, capacity_upper_bound=1e6, **proportional_cost_op, units=mat_units_GWh )
+                        G.add_edge("M"+str(dem["index"][i])+str(104+a)+str(time_multiplier[l]),"O"+str(dem["index"][i])+str(165+a)+str(time_multiplier[l]),weight=1)
+                        G.add_edge("O"+str(dem["index"][i])+str(165+a)+str(time_multiplier[l]),"M"+str(dem["index"][i])+str(175)+str(time_multiplier[l]),weight=0.999)    
+                
+            
+                for c in range(3):#electric to heat low-mid temp
+                    if G.has_node("M"+str(dem["index"][i])+str(105+c)+str(time_multiplier[l])):
+                        G.add_node("O"+str(dem["index"][i])+str(170+c)+str(time_multiplier[l]), names="O"+str(dem["index"][i])+str(170+c)+str(time_multiplier[l])
+                            ,capacity_lower_bound=0, capacity_upper_bound=1e6, **proportional_cost_op, units=mat_units_GWh)
+                        G.add_edge("M"+str(dem["index"][i])+str(105+c)+str(time_multiplier[l]),"O"+str(dem["index"][i])+str(170+c)+str(time_multiplier[l]),weight=1)
+                        G.add_edge("O"+str(dem["index"][i])+str(170+c)+str(time_multiplier[l]),"M"+str(dem["index"][i])+str(176)+str(time_multiplier[l]),weight=0.999)    
+                        
+                for b in range(2):
+                    G.add_node("M"+str(dem["index"][i])+str(175+b)+str(time_multiplier[l]), names="M"+str(dem["index"][i])+str(175+b)+str(time_multiplier[l]),
+                                        type='intermediate',flow_rate_lower_bound=0, flow_rate_upper_bound=1e6, price=0, units=mat_units_GWh)
+                    G.add_node("O"+str(dem["index"][i])+str(177+b)+str(time_multiplier[l]), names="O"+str(dem["index"][i])+str(177+b)+str(time_multiplier[l]),
+                                        capacity_lower_bound=0, capacity_upper_bound=1e6, **proportional_cost_op, units=mat_units_GWh)
+                    G.add_node("M"+str(dem["index"][i])+str(179+b)+str(1)+str(time_multiplier[l]), names="M"+str(dem["index"][i])+str(179+b)+str(1)+str(time_multiplier[l]),
+                                        type='intermediate',flow_rate_lower_bound=0, flow_rate_upper_bound=1e6, price=0, units=mat_units_GWh)            
+                    G.add_node("M"+str(dem["index"][i])+str(179+b)+str(2)+str(time_multiplier[l]), names="M"+str(dem["index"][i])+str(179+b)+str(2)+str(time_multiplier[l]),
+                                        type='intermediate',flow_rate_lower_bound=0, flow_rate_upper_bound=1e6, price=0, units=mat_units_GWh)     
+
+                    G.add_edge("M"+str(dem["index"][i])+str(175+b)+str(time_multiplier[l]),"O"+str(dem["index"][i])+str(177+b)+str(time_multiplier[l]),weight=1)
+                    G.add_edge("O"+str(dem["index"][i])+str(177+b)+str(time_multiplier[l]),"M"+str(dem["index"][i])+str(179+b)+str(1)+str(time_multiplier[l]),weight=1)
+                    G.add_edge("M"+str(dem["index"][i])+str(179+b)+str(1)+str(time_multiplier[l]),"O"+str(dem["index"][i])+str(179+b),weight=1e-7)
+                    G.add_edge("O"+str(dem["index"][i])+str(179+b),"M"+str(dem["index"][i])+str(179+b)+str(2)+str(time_multiplier[l]),weight=1)
+                    G.add_edge("M"+str(dem["index"][i])+str(179+b)+str(2)+str(time_multiplier[l]),"O"+str(dem["index"][i])+str(177+b)+str(time_multiplier[l]),weight=1)
+                    
+
+                    G.add_node("M"+str(dem["index"][i])+str(181+b)+str(time_multiplier[l]), names="M"+str(dem["index"][i])+str(181+b)+str(time_multiplier[l]),
+                                        type='intermediate',flow_rate_lower_bound=0, flow_rate_upper_bound=1e6, price=0, units=mat_units_GWh)
+                    G.add_node("O"+str(dem["index"][i])+str(183+b)+str(time_multiplier[l]),names="O"+str(dem["index"][i])+str(183+b)+str(time_multiplier[l]),capacity_lower_bound=0, capacity_upper_bound=1e6, **proportional_cost_op, units=mat_units_GWh)   
+
+                    G.add_edge("O"+str(dem["index"][i])+str(177+b)+str(time_multiplier[l]),"M"+str(dem["index"][i])+str(181+b)+str(time_multiplier[l]),weight=1)
+                    G.add_edge("M"+str(dem["index"][i])+str(181+b)+str(time_multiplier[l]),"O"+str(dem["index"][i])+str(183+b)+str(time_multiplier[l]),weight=1)
+                    G.add_edge("O"+str(dem["index"][i])+str(183+b)+str(time_multiplier[l]),"M"+str(dem["index"][i])+str(124+b)+str(time_multiplier[l]),weight=1)
+                
+                G.add_node("O"+str(dem["index"][i])+str(185)+str(time_multiplier[l]),names="O"+str(dem["index"][i])+str(185)+str(time_multiplier[l]),capacity_lower_bound=0, capacity_upper_bound=1e6, **proportional_cost_op, units=mat_units_GWh)   
+                G.add_edge("M"+str(dem["index"][i])+str(182)+str(time_multiplier[l]),"O"+str(dem["index"][i])+str(185)+str(time_multiplier[l]),weight=1)
+                G.add_edge("O"+str(dem["index"][i])+str(185)+str(time_multiplier[l]),"M"+str(dem["index"][i])+str(124)+str(time_multiplier[l]),weight=1)
+                
+            for l in range(len(time_multiplier)):
+                next_l = l + 1
+                if next_l == len(time_multiplier):
+                    next_l = 0
+                for b in range(2):
+                    G.add_edge("M"+str(dem["index"][i])+str(181+b)+str(time_multiplier[l]),"O"+str(dem["index"][i])+str(177+b)+str(time_multiplier[next_l]),weight=0.993)
+            
+                
+    #working for biomass
+        for i in range(len(dem["index"])):          
+            for l in range(len(time_multiplier)):
+                if G.has_node("M"+str(dem["index"][i])+str(144)+str(time_multiplier[l])):
+                    for a in range(5):
+                        G.add_node("O"+str(dem["index"][i])+str(190+a)+str(time_multiplier[l]),names="O"+str(dem["index"][i])+str(190+a)+str(time_multiplier[l]),capacity_lower_bound=0, capacity_upper_bound=1e6, **proportional_cost_op, units=mat_units_GWh)   
+                        G.add_edge("M"+str(dem["index"][i])+str(144)+str(time_multiplier[l]),"O"+str(dem["index"][i])+str(190+a)+str(time_multiplier[l]),weight=1)
+                        G.add_edge("O"+str(dem["index"][i])+str(190+a)+str(time_multiplier[l]),"M"+str(dem["index"][i])+str(175)+str(time_multiplier[l]),weight=0.999)
+                
+                        G.add_node("O"+str(dem["index"][i])+str(195+a)+str(time_multiplier[l]),names="O"+str(dem["index"][i])+str(195+a)+str(time_multiplier[l]),capacity_lower_bound=0, capacity_upper_bound=1e6, **proportional_cost_op, units=mat_units_GWh)   
+                        G.add_edge("M"+str(dem["index"][i])+str(144)+str(time_multiplier[l]),"O"+str(dem["index"][i])+str(195+a)+str(time_multiplier[l]),weight=1)
+                        G.add_edge("O"+str(dem["index"][i])+str(195+a)+str(time_multiplier[l]),"M"+str(dem["index"][i])+str(176)+str(time_multiplier[l]),weight=0.999)
+
+
 
 
     results = process_all_biomass(unique_list2, biomass_properties)
     coal_boilers_retrofitting(dem_coal_boilers)   
     
-    # for l in range(len(time_multiplier)):
-    #     value = G._node["O3009103"+str(time_multiplier[l])]["proportional_cost"]
-    #     # print(value)
-    #     G._node["O3009103"+str(time_multiplier[l])]["proportional_cost"] = value/2
-        
-    # for i in range(len(dem['index'])):
-    #     for l in range(len(time_multiplier)):
-    #         value = G._node["O"+str(3000+dem['index'][i])+str(103)+str(time_multiplier[l])]["proportional_cost"]
-    #         # print(value)
-    #         G._node["O"+str(3000+dem['index'][i])+str(103)+str(time_multiplier[l])]["proportional_cost"] = value/2
-
-    
-    # klogs2,bio_exi,gen_exi =process_biomass_green_industry(unique_list2,call_count=0)
-    # testing = process_biomass_gen_fuel(unique_list2,call_count=0,bio_existing=bio_exi,gen_existing=gen_exi)
-    # klogs3,r0 =process_biomass_factory(unique_list2,bio_exi,call_count=0)
-    
-    # # # testing = process_biomass_gen_fuel(unique_list2,call_count=0,bio_existing=bio_exi,gen_existing=gen_exi)
-    # # # klogs3,r0 =process_biomass_factory(unique_list2,bio_exi,call_count=0)
-
-
-    # straw_stover2,bio_exi,gen_exi =process_biomass_green_industry(unique_list2,call_count=1,gen_existing=gen_exi)
-    # testing1 = process_biomass_gen_fuel(unique_list2,call_count=1,bio_existing=bio_exi,gen_existing=gen_exi)
-    # straw_stover3,r1= process_biomass_factory(unique_list2,bio_exi,call_count=1)
 
     setupped_time = time.time() - time_step
     elapsed_time = time.time() - start_time
     time_step = time.time()
     time_setup +=setupped_time
-       
-
-
-    # print(dem)
-    # m = 0
-    # for i in range(len(gen['index'])):
-    #     if gen['status'][i]!="Commissioning":
-    #         m += 1
-            
-    # print("Long",len(gen['index']))
-    
-
-    # print(ME)
-    # print("O1236401::",list(G.predecessors("O1236401")) )
-    # print("O1237001::",list(G.predecessors("O1237001")) )
 
     
     print(f"Time elapsed done for setting up simulation {num+1}: {elapsed_time:.2f} seconds\n")
@@ -1824,7 +1961,7 @@ for num in range(0,num_simulations):
     # print(ME)
     
     framework = "Pyomo"  # choose between 'Pyomo' and 'Pgraph'
-    P = Pgraph(problem_network=G, mutual_exclusion=ME, solver=solve_type, max_sol=num_sol*1000000)
+    P = Pgraph(problem_network=G, mutual_exclusion=ME, solver=solve_type, max_sol=num_sol)
 
     if framework == "Pgraph":
         #Monte Carlo things
@@ -1841,7 +1978,7 @@ for num in range(0,num_simulations):
         from pgraph_convertor_v5 import run_file
         P.create_solver_input()
         file_path = r"C:\Users\dc278\.conda\envs\pyomo_pgraph_converter\Lib\Pgraph/solver/input.in"
-        model = run_file(file_path, output_file_path = r"C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\pyomo_results.xlsx")
+        model = run_file(file_path, output_file_path = r"C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\pyomo_results_hourly.xlsx")
         
     solved_time = time.time() - time_step
     elapsed_time = time.time() - start_time
@@ -1860,6 +1997,7 @@ for num in range(0,num_simulations):
 #Monte Carlo things
 # Analyze datasets
 if num_simulations != 1:
+    print(goo_reference)
     for i, goplist in enumerate(goo_reference):
         analyzer.analyze(goplist)
 
@@ -1888,38 +2026,46 @@ if elapsed_time <= 120:
 
 
 
-with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\output_results/gen.pkl', 'wb') as f:
+with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\MonteCarloOutput/gen.pkl', 'wb') as f:
     pickle.dump(gen, f)
 
-with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\output_results/dem.pkl', 'wb') as f:
+with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\MonteCarloOutput/dem.pkl', 'wb') as f:
     pickle.dump(dem, f)
 
-with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\output_results/gxp_connections_dict.pkl', 'wb') as f:
+with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\MonteCarloOutput/gxp_connections_dict.pkl', 'wb') as f:
     pickle.dump(gxp_connections_dict, f)
 
-with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\output_results/gxp.pkl', 'wb') as f:
+with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\MonteCarloOutput/gxp.pkl', 'wb') as f:
     pickle.dump(gxp, f)
     
-with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\output_results/island.pkl', 'wb') as f:
+with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\MonteCarloOutput/island.pkl', 'wb') as f:
     pickle.dump(island, f)
     
-with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\output_results/time_multiplier.pkl', 'wb') as f:
+with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\MonteCarloOutput/time_multiplier.pkl', 'wb') as f:
     pickle.dump(time_multiplier, f)    
 
-with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\output_results/time_resolution.pkl', 'wb') as f:
+with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\MonteCarloOutput/time_resolution.pkl', 'wb') as f:
     pickle.dump(time_resolution, f)   
     
-with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\output_results/time_period.pkl', 'wb') as f:
+with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\MonteCarloOutput/time_period.pkl', 'wb') as f:
     pickle.dump(time_period, f)   
         
-with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\output_results/main_path.pkl', 'wb') as f:
+with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\MonteCarloOutput/main_path.pkl', 'wb') as f:
     pickle.dump(main_path, f)      
 
-with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\output_results/framework.pkl', 'wb') as f:
+with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\MonteCarloOutput/framework.pkl', 'wb') as f:
     pickle.dump(framework, f)
 
-with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\output_results/hydro.pkl', 'wb') as f:
-    pickle.dump(hydro, f)
+if time_resolution == "monthly":
+    with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\MonteCarloOutput/hydro.pkl', 'wb') as f:
+        pickle.dump(hydro, f)
+
+with open(r'C:\Users\dc278\OneDrive - The University of Waikato\Documents\GitHub\P-graph-monte-carlo\MonteCarloOutput/unique_list2.pkl', 'wb') as f:
+    pickle.dump(unique_list2, f)
+
+
+
+
 
 def save_input_and_output_file():
     # Source path
