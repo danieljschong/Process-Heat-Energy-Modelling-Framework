@@ -58,7 +58,7 @@ def ninja_build_weather_url(lat, lon, from_date='2014-01-01', to_date='2014-12-3
 
 def ninja_get_url(url):
     apilog.enforce_rate_limits()
-    headers = {'Authorization': 'Token 3b98eda24a4abaea3b99d294858e83a7c2dcb1dc'}
+    headers = {'Authorization': 'Token add your token here'}
     response = requests.get(url, headers=headers)
     #print(response.text)
     #print(response)
