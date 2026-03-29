@@ -25,3 +25,6 @@ Python output files which include masks that generate tables from raw results
 
 ## E5 - Case Study codes
 Includes three simulation modes
+
+
+Disclaimer: The codes have been modified by AI
